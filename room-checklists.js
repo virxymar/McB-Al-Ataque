@@ -1,4 +1,4 @@
-/* McB · Estancias + Próxima vuelta + controles periódicos v3 */
+/* McB · Estancias + Hoy + Próxima vuelta + controles periódicos v4 */
 (function(){
   function slug(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase()}
   const aliases={
@@ -7,19 +7,73 @@
   function periodicFor(item){const id=aliases[slug(item)];return id?periodic.find(p=>p[0]===id):null}
   function roomKey(name,group,item){if(group==='Diario')return'mcb_room_day_'+localISO()+'_'+slug(name)+'_'+slug(item);if(group==='Semanal')return'mcb_room_week_'+currentWeek()+'_'+slug(name)+'_'+slug(item);return'mcb_room_date_'+slug(name)+'_'+slug(group)+'_'+slug(item)}
   function addDays(date,days){const d=new Date(date+'T12:00');d.setDate(d.getDate()+days);return d}
-  function stateFor(name,group,item){const key=roomKey(name,group,item),p=periodicFor(item);if(group==='Diario'||group==='Semanal')return{key,checked:localStorage.getItem(key)==='1',date:null,p:null};if(p){const h=hist(),date=h[p[0]]||null;return{key,checked:!!date,date,p}}const date=localStorage.getItem(key);return{key,checked:!!date,date,p:null}}
+
+  function canon(s){
+    const x=slug(s);
+    if(x.includes('ventilar'))return'ventilar';
+    if(x.includes('hacer_camas'))return'hacer_camas';
+    if(x.includes('encimera'))return'encimera';
+    if(x.includes('fregadero'))return'fregadero';
+    if(x.includes('vitro'))return'vitro';
+    if(x.includes('recoger')||x.includes('recogida'))return'recogida';
+    if(x.includes('cambiar_sabanas')||x==='sabanas')return'sabanas';
+    if(x.includes('mesillas')||x.includes('cabeceros'))return'mesillas';
+    if(x.includes('aspirar'))return'aspirar';
+    if(x.includes('fregar'))return'fregar';
+    if(x==='wc'||x.startsWith('wc_'))return'wc';
+    if(x.includes('lavabo'))return'lavabo';
+    if(x.includes('ducha')||x.includes('banera'))return'ducha';
+    if(x.includes('mampara'))return'mampara';
+    if(x.includes('espejo'))return'espejo';
+    if(x.includes('mueble_tv'))return'mueble_tv';
+    if(x.includes('mesa_y_sillas')||x==='mesa_sillas')return'mesa_sillas';
+    if(x.includes('sofa')&&x.includes('cojines'))return'sofa_cojines';
+    if(x.includes('polvo'))return'polvo';
+    if(x.includes('frentes_y_tiradores'))return'frentes_tiradores';
+    if(x.includes('exterior_electrodomesticos'))return'exterior_electrodomesticos';
+    if(x.includes('vaciar_basura'))return'basura';
+    return x;
+  }
+  function todayMatchIndex(item){
+    const c=dayCodes[new Date().getDay()];
+    if(!base[c])return-1;
+    const target=canon(item), arr=base[c].tasks;
+    for(let i=0;i<arr.length;i++)if(canon(arr[i])===target)return i;
+    return-1;
+  }
+  function stateFor(name,group,item){
+    const key=roomKey(name,group,item),p=periodicFor(item);
+    if(group==='Diario'||group==='Semanal'){
+      const idx=todayMatchIndex(item),local=localStorage.getItem(key)==='1';
+      const checked=idx>=0 ? !!taskState()[idx] : local;
+      return{key,checked,date:null,p:null,todayIdx:idx};
+    }
+    if(p){const h=hist(),date=h[p[0]]||null;return{key,checked:!!date,date,p,todayIdx:-1}}
+    const date=localStorage.getItem(key);return{key,checked:!!date,date,p:null,todayIdx:-1};
+  }
   function status(group,s){if(group==='Diario'||group==='Semanal')return'';if(!s.date)return'<div class="muted" style="margin-left:30px">Sin registrar</div>';let txt='Última: '+new Date(s.date+'T12:00').toLocaleDateString('es-ES');if(s.p){const next=addDays(s.date,s.p[2]),dif=Math.ceil((next-new Date())/86400000);txt+=' · Próxima: '+next.toLocaleDateString('es-ES')+' · '+(dif<=0?'Toca ahora':'faltan '+dif+' días')}else if(group==='Mensual'){const next=addDays(s.date,30);txt+=' · Próxima referencia: '+next.toLocaleDateString('es-ES')}return'<div class="muted" style="margin-left:30px">'+txt+'</div>'}
 
   window.fillRoom=function(name,group){
     const a=rooms[name][group];if(!a.length){rtasks.innerHTML='<div class="muted" style="padding:12px 0">Sin tareas fijas.</div>';return}
     rtasks.innerHTML=a.map((item,i)=>{const s=stateFor(name,group,item);return'<div class="list"><label class="task '+(s.checked?'done':'')+'"><input type="checkbox" data-roomcheck="'+i+'" '+(s.checked?'checked':'')+'><span>'+item+'</span></label>'+status(group,s)+'</div>'}).join('');
-    rtasks.querySelectorAll('[data-roomcheck]').forEach(cb=>cb.addEventListener('change',()=>{const item=a[Number(cb.dataset.roomcheck)],s=stateFor(name,group,item);if(group==='Diario'||group==='Semanal'){if(cb.checked)localStorage.setItem(s.key,'1');else localStorage.removeItem(s.key)}else if(s.p){const h=hist();if(cb.checked)h[s.p[0]]=localISO();else if(h[s.p[0]]===s.date)delete h[s.p[0]];setHist(h)}else{if(cb.checked)localStorage.setItem(s.key,localISO());else localStorage.removeItem(s.key)}window.fillRoom(name,group)}));
+    rtasks.querySelectorAll('[data-roomcheck]').forEach(cb=>cb.addEventListener('change',()=>{
+      const item=a[Number(cb.dataset.roomcheck)],s=stateFor(name,group,item);
+      if(group==='Diario'||group==='Semanal'){
+        if(cb.checked)localStorage.setItem(s.key,'1');else localStorage.removeItem(s.key);
+        if(s.todayIdx>=0){const ts=taskState();ts[s.todayIdx]=cb.checked;setTaskState(ts);window.renderToday()}
+      }else if(s.p){
+        const h=hist();if(cb.checked)h[s.p[0]]=localISO();else if(h[s.p[0]]===s.date)delete h[s.p[0]];setHist(h)
+      }else{
+        if(cb.checked)localStorage.setItem(s.key,localISO());else localStorage.removeItem(s.key)
+      }
+      window.fillRoom(name,group)
+    }));
   };
 
   function pending(){return JSON.parse(localStorage.getItem('mcb_pending_rotations')||'[]')}
   function savePending(a){localStorage.setItem('mcb_pending_rotations',JSON.stringify(a))}
   function todayCode(){return dayCodes[new Date().getDay()]}
-  function pendingKey(){return 'w'+currentWeek()+'-'+todayCode()}
+  function pendingKey(){return'w'+currentWeek()+'-'+todayCode()}
   function deferToday(){const c=todayCode();if(!base[c])return;const w=currentWeek(),k=pendingKey(),a=pending();const old=a.find(x=>x.key===k&&x.status==='pending');const due=new Date();due.setDate(due.getDate()+28);if(old){old.due=localISO(due);old.saved=localISO()}else a.push({key:k,week:w,day:c,title:rotations[w].items[c],saved:localISO(),due:localISO(due),status:'pending'});savePending(a);window.renderToday()}
   function completePendingToday(){const k=pendingKey(),a=pending();let ch=false;a.forEach(x=>{if(x.key===k&&x.status==='pending'){x.status='done';x.completed=localISO();ch=true}});if(ch)savePending(a)}
   function enhanceToday(){
