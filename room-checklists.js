@@ -1,102 +1,25 @@
-/* McB · Estancias + Hoy + Próxima vuelta + controles periódicos v4 */
+/* McB · sincronización + pendientes + periódicas inteligentes v5 */
 (function(){
-  function slug(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase()}
-  const aliases={
-    'lavavajillas_filtro_juntas':'lavavajillas','lavadora_goma_cajetin_filtro':'lavadora','aspirar_colchones_1_2_meses':'colchones','persianas_2_3_meses':'persianas','cortinas_visillos_3_6_meses':'cortinas','interior_canapes_3_6_meses':'canapes','parte_superior_detras_frigorifico':'frigo'
-  };
-  function periodicFor(item){const id=aliases[slug(item)];return id?periodic.find(p=>p[0]===id):null}
-  function roomKey(name,group,item){if(group==='Diario')return'mcb_room_day_'+localISO()+'_'+slug(name)+'_'+slug(item);if(group==='Semanal')return'mcb_room_week_'+currentWeek()+'_'+slug(name)+'_'+slug(item);return'mcb_room_date_'+slug(name)+'_'+slug(group)+'_'+slug(item)}
-  function addDays(date,days){const d=new Date(date+'T12:00');d.setDate(d.getDate()+days);return d}
-
-  function canon(s){
-    const x=slug(s);
-    if(x.includes('ventilar'))return'ventilar';
-    if(x.includes('hacer_camas'))return'hacer_camas';
-    if(x.includes('encimera'))return'encimera';
-    if(x.includes('fregadero'))return'fregadero';
-    if(x.includes('vitro'))return'vitro';
-    if(x.includes('recoger')||x.includes('recogida'))return'recogida';
-    if(x.includes('cambiar_sabanas')||x==='sabanas')return'sabanas';
-    if(x.includes('mesillas')||x.includes('cabeceros'))return'mesillas';
-    if(x.includes('aspirar'))return'aspirar';
-    if(x.includes('fregar'))return'fregar';
-    if(x==='wc'||x.startsWith('wc_'))return'wc';
-    if(x.includes('lavabo'))return'lavabo';
-    if(x.includes('ducha')||x.includes('banera'))return'ducha';
-    if(x.includes('mampara'))return'mampara';
-    if(x.includes('espejo'))return'espejo';
-    if(x.includes('mueble_tv'))return'mueble_tv';
-    if(x.includes('mesa_y_sillas')||x==='mesa_sillas')return'mesa_sillas';
-    if(x.includes('sofa')&&x.includes('cojines'))return'sofa_cojines';
-    if(x.includes('polvo'))return'polvo';
-    if(x.includes('frentes_y_tiradores'))return'frentes_tiradores';
-    if(x.includes('exterior_electrodomesticos'))return'exterior_electrodomesticos';
-    if(x.includes('vaciar_basura'))return'basura';
-    return x;
-  }
-  function todayMatchIndex(item){
-    const c=dayCodes[new Date().getDay()];
-    if(!base[c])return-1;
-    const target=canon(item), arr=base[c].tasks;
-    for(let i=0;i<arr.length;i++)if(canon(arr[i])===target)return i;
-    return-1;
-  }
-  function stateFor(name,group,item){
-    const key=roomKey(name,group,item),p=periodicFor(item);
-    if(group==='Diario'||group==='Semanal'){
-      const idx=todayMatchIndex(item),local=localStorage.getItem(key)==='1';
-      const checked=idx>=0 ? !!taskState()[idx] : local;
-      return{key,checked,date:null,p:null,todayIdx:idx};
-    }
-    if(p){const h=hist(),date=h[p[0]]||null;return{key,checked:!!date,date,p,todayIdx:-1}}
-    const date=localStorage.getItem(key);return{key,checked:!!date,date,p:null,todayIdx:-1};
-  }
-  function status(group,s){if(group==='Diario'||group==='Semanal')return'';if(!s.date)return'<div class="muted" style="margin-left:30px">Sin registrar</div>';let txt='Última: '+new Date(s.date+'T12:00').toLocaleDateString('es-ES');if(s.p){const next=addDays(s.date,s.p[2]),dif=Math.ceil((next-new Date())/86400000);txt+=' · Próxima: '+next.toLocaleDateString('es-ES')+' · '+(dif<=0?'Toca ahora':'faltan '+dif+' días')}else if(group==='Mensual'){const next=addDays(s.date,30);txt+=' · Próxima referencia: '+next.toLocaleDateString('es-ES')}return'<div class="muted" style="margin-left:30px">'+txt+'</div>'}
-
-  window.fillRoom=function(name,group){
-    const a=rooms[name][group];if(!a.length){rtasks.innerHTML='<div class="muted" style="padding:12px 0">Sin tareas fijas.</div>';return}
-    rtasks.innerHTML=a.map((item,i)=>{const s=stateFor(name,group,item);return'<div class="list"><label class="task '+(s.checked?'done':'')+'"><input type="checkbox" data-roomcheck="'+i+'" '+(s.checked?'checked':'')+'><span>'+item+'</span></label>'+status(group,s)+'</div>'}).join('');
-    rtasks.querySelectorAll('[data-roomcheck]').forEach(cb=>cb.addEventListener('change',()=>{
-      const item=a[Number(cb.dataset.roomcheck)],s=stateFor(name,group,item);
-      if(group==='Diario'||group==='Semanal'){
-        if(cb.checked)localStorage.setItem(s.key,'1');else localStorage.removeItem(s.key);
-        if(s.todayIdx>=0){const ts=taskState();ts[s.todayIdx]=cb.checked;setTaskState(ts);window.renderToday()}
-      }else if(s.p){
-        const h=hist();if(cb.checked)h[s.p[0]]=localISO();else if(h[s.p[0]]===s.date)delete h[s.p[0]];setHist(h)
-      }else{
-        if(cb.checked)localStorage.setItem(s.key,localISO());else localStorage.removeItem(s.key)
-      }
-      window.fillRoom(name,group)
-    }));
-  };
-
-  function pending(){return JSON.parse(localStorage.getItem('mcb_pending_rotations')||'[]')}
-  function savePending(a){localStorage.setItem('mcb_pending_rotations',JSON.stringify(a))}
-  function todayCode(){return dayCodes[new Date().getDay()]}
-  function pendingKey(){return'w'+currentWeek()+'-'+todayCode()}
-  function deferToday(){const c=todayCode();if(!base[c])return;const w=currentWeek(),k=pendingKey(),a=pending();const old=a.find(x=>x.key===k&&x.status==='pending');const due=new Date();due.setDate(due.getDate()+28);if(old){old.due=localISO(due);old.saved=localISO()}else a.push({key:k,week:w,day:c,title:rotations[w].items[c],saved:localISO(),due:localISO(due),status:'pending'});savePending(a);window.renderToday()}
-  function completePendingToday(){const k=pendingKey(),a=pending();let ch=false;a.forEach(x=>{if(x.key===k&&x.status==='pending'){x.status='done';x.completed=localISO();ch=true}});if(ch)savePending(a)}
-  function enhanceToday(){
-    const c=todayCode();if(!base[c])return;const cards=document.querySelectorAll('#tareas .card');if(!cards.length)return;const last=cards[cards.length-1],label=last.querySelector('.task'),cb=last.querySelector('input[type=checkbox]');if(!label||!cb)return;
-    const k=pendingKey(),p=pending().find(x=>x.key===k&&x.status==='pending');
-    const box=document.createElement('div');box.style.marginTop='8px';
-    if(p&&p.due<=localISO())box.innerHTML='<div class="muted" style="margin-bottom:6px">⏭️ Pendiente de la vuelta anterior</div>';
-    if(!cb.checked){const b=document.createElement('button');b.className='mini';b.textContent=p?'✓ Ya está guardada para próxima vuelta':'⏭️ Próxima vuelta';b.disabled=!!p;b.addEventListener('click',deferToday);box.appendChild(b)}
-    else if(p){completePendingToday()}
-    last.appendChild(box);
-    cb.addEventListener('change',()=>{if(cb.checked)completePendingToday()});
-  }
-  const originalRenderToday=window.renderToday;
-  window.renderToday=function(){originalRenderToday();enhanceToday()};
-
-  function undoPeriodic(id){const h=hist();if(!h[id])return;delete h[id];setHist(h);window.renderPeriodic();if(document.getElementById('historial')&&!document.getElementById('historial').classList.contains('hidden'))window.renderHistory()}
-  window.renderPeriodic=function(){
-    const h=hist();periodicList.innerHTML=periodic.map(([id,t,d])=>{const last=h[id]?new Date(h[id]+'T12:00'):null;let status='Sin registrar';if(last){const next=new Date(last);next.setDate(next.getDate()+d);const dif=Math.ceil((next-new Date())/86400000);status='Última: '+last.toLocaleDateString('es-ES')+' · '+(dif<=0?'Toca ahora':'Faltan '+dif+' días')}return'<div class="card"><span class="pill">'+d+' días aprox.</span><h2 style="margin-top:7px">'+t+'</h2><div class="muted">'+status+'</div><div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px"><button class="btn" data-p="'+id+'">✓ Hecha hoy</button>'+(last?'<button class="btn alt" data-undo-p="'+id+'">↶ Deshacer registro</button>':'')+'</div></div>'}).join('');
-    document.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>{const h=hist();h[b.dataset.p]=localISO();setHist(h);window.renderPeriodic()}));
-    document.querySelectorAll('[data-undo-p]').forEach(b=>b.addEventListener('click',()=>undoPeriodic(b.dataset.undoP)));
-  };
-  window.renderHistory=function(){
-    const h=hist(),rows=periodic.filter(x=>h[x[0]]);histList.innerHTML=rows.length?rows.map(([id,t,d])=>{const last=new Date(h[id]+'T12:00'),next=new Date(last);next.setDate(next.getDate()+d);return'<div class="card"><h2>'+t+'</h2><div class="muted">Última: '+last.toLocaleDateString('es-ES')+'</div><div class="muted">Próxima referencia: '+next.toLocaleDateString('es-ES')+'</div><button class="btn alt" style="margin-top:8px" data-hundo="'+id+'">↶ Borrar este registro</button></div>'}).join(''):'<div class="card">Sin historial todavía.</div>';document.querySelectorAll('[data-hundo]').forEach(b=>b.addEventListener('click',()=>undoPeriodic(b.dataset.hundo)))};
-
-  window.renderToday();window.renderPeriodic();
+function slug(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').toLowerCase()}
+const aliases={'lavavajillas_filtro_juntas':'lavavajillas','lavadora_goma_cajetin_filtro':'lavadora','aspirar_colchones_1_2_meses':'colchones','persianas_2_3_meses':'persianas','cortinas_visillos_3_6_meses':'cortinas','interior_canapes_3_6_meses':'canapes','parte_superior_detras_frigorifico':'frigo'};
+function periodicFor(item){const id=aliases[slug(item)];return id?periodic.find(p=>p[0]===id):null}
+function roomKey(n,g,i){if(g==='Diario')return'mcb_room_day_'+localISO()+'_'+slug(n)+'_'+slug(i);if(g==='Semanal')return'mcb_room_week_'+currentWeek()+'_'+slug(n)+'_'+slug(i);return'mcb_room_date_'+slug(n)+'_'+slug(g)+'_'+slug(i)}
+function addDays(date,days){const d=new Date(date+'T12:00');d.setDate(d.getDate()+days);return d}
+function canon(s){const x=slug(s);if(x.includes('ventilar'))return'ventilar';if(x.includes('hacer_camas'))return'hacer_camas';if(x.includes('encimera'))return'encimera';if(x.includes('fregadero'))return'fregadero';if(x.includes('vitro'))return'vitro';if(x.includes('recoger')||x.includes('recogida'))return'recogida';if(x.includes('cambiar_sabanas')||x==='sabanas')return'sabanas';if(x.includes('mesillas')||x.includes('cabeceros'))return'mesillas';if(x.includes('aspirar'))return'aspirar';if(x.includes('fregar'))return'fregar';if(x==='wc'||x.startsWith('wc_'))return'wc';if(x.includes('lavabo'))return'lavabo';if(x.includes('ducha')||x.includes('banera'))return'ducha';if(x.includes('mampara'))return'mampara';if(x.includes('espejo'))return'espejo';if(x.includes('mueble_tv'))return'mueble_tv';if(x.includes('mesa_y_sillas')||x==='mesa_sillas')return'mesa_sillas';if(x.includes('sofa')&&x.includes('cojines'))return'sofa_cojines';if(x.includes('polvo'))return'polvo';if(x.includes('frentes_y_tiradores'))return'frentes_tiradores';if(x.includes('exterior_electrodomesticos'))return'exterior_electrodomesticos';if(x.includes('vaciar_basura'))return'basura';return x}
+function todayMatchIndex(item){const c=dayCodes[new Date().getDay()];if(!base[c])return-1;const target=canon(item);return base[c].tasks.findIndex(x=>canon(x)===target)}
+function stateFor(n,g,item){const key=roomKey(n,g,item),p=periodicFor(item);if(g==='Diario'||g==='Semanal'){const idx=todayMatchIndex(item),local=localStorage.getItem(key)==='1';return{key,checked:idx>=0?!!taskState()[idx]:local,date:null,p:null,todayIdx:idx}}if(p){const h=hist(),date=h[p[0]]||null;return{key,checked:!!date,date,p,todayIdx:-1}}const date=localStorage.getItem(key);return{key,checked:!!date,date,p:null,todayIdx:-1}}
+function status(g,s){if(g==='Diario'||g==='Semanal')return'';if(!s.date)return'<div class="muted" style="margin-left:30px">Sin registrar</div>';let txt='Última: '+new Date(s.date+'T12:00').toLocaleDateString('es-ES');if(s.p){const next=addDays(s.date,s.p[2]),dif=Math.ceil((next-new Date())/86400000);txt+=' · Próxima: '+next.toLocaleDateString('es-ES')+' · '+(dif<=0?'Toca ahora':'faltan '+dif+' días')}else if(g==='Mensual')txt+=' · Próxima referencia: '+addDays(s.date,30).toLocaleDateString('es-ES');return'<div class="muted" style="margin-left:30px">'+txt+'</div>'}
+window.fillRoom=function(n,g){const a=rooms[n][g];if(!a.length){rtasks.innerHTML='<div class="muted" style="padding:12px 0">Sin tareas fijas.</div>';return}rtasks.innerHTML=a.map((item,i)=>{const s=stateFor(n,g,item);return'<div class="list"><label class="task '+(s.checked?'done':'')+'"><input type="checkbox" data-roomcheck="'+i+'" '+(s.checked?'checked':'')+'><span>'+item+'</span></label>'+status(g,s)+'</div>'}).join('');rtasks.querySelectorAll('[data-roomcheck]').forEach(cb=>cb.addEventListener('change',()=>{const item=a[Number(cb.dataset.roomcheck)],s=stateFor(n,g,item);if(g==='Diario'||g==='Semanal'){if(cb.checked)localStorage.setItem(s.key,'1');else localStorage.removeItem(s.key);if(s.todayIdx>=0){const ts=taskState();ts[s.todayIdx]=cb.checked;setTaskState(ts);window.renderToday()}}else if(s.p){const h=hist();if(cb.checked)h[s.p[0]]=localISO();else if(h[s.p[0]]===s.date)delete h[s.p[0]];setHist(h)}else{if(cb.checked)localStorage.setItem(s.key,localISO());else localStorage.removeItem(s.key)}window.fillRoom(n,g)}))};
+function pending(){return JSON.parse(localStorage.getItem('mcb_pending_rotations')||'[]')}function savePending(a){localStorage.setItem('mcb_pending_rotations',JSON.stringify(a))}function todayCode(){return dayCodes[new Date().getDay()]}function pendingKey(){return'w'+currentWeek()+'-'+todayCode()}
+function deferToday(){const c=todayCode();if(!base[c])return;const w=currentWeek(),k=pendingKey(),a=pending();const due=new Date();due.setDate(due.getDate()+28);const old=a.find(x=>x.key===k&&x.status==='pending');if(old){old.due=localISO(due);old.saved=localISO()}else a.push({key:k,week:w,day:c,title:rotations[w].items[c],saved:localISO(),due:localISO(due),status:'pending'});savePending(a);window.renderToday()}
+function completePendingToday(){const k=pendingKey(),a=pending();let ch=false;a.forEach(x=>{if(x.key===k&&x.status==='pending'){x.status='done';x.completed=localISO();ch=true}});if(ch)savePending(a)}
+const preferred={lavadora:['lun','jue','vie'],lavavajillas:['vie'],colchones:['mie'],persianas:['lun','jue'],cortinas:['jue'],canapes:['mie'],frigo:['vie']};
+function duePeriodicForToday(){const c=todayCode(),h=hist(),due=[];periodic.forEach(p=>{const [id,t,d]=p,last=h[id];let isDue=!last;if(last){const next=addDays(last,d);isDue=next<=new Date()}if(isDue&&(preferred[id]||[]).includes(c))due.push(p)});return due[0]||null}
+function enhanceToday(){const c=todayCode();if(!base[c])return;const cards=document.querySelectorAll('#tareas .card');if(!cards.length)return;const last=cards[cards.length-1],cb=last.querySelector('input[type=checkbox]');if(!cb)return;const k=pendingKey(),p=pending().find(x=>x.key===k&&x.status==='pending'),smart=duePeriodicForToday();const box=document.createElement('div');box.style.marginTop='8px';if(p&&p.due<=localISO())box.innerHTML+='<div class="muted" style="margin-bottom:6px">⏭️ Esta tarea quedó pendiente la última vez que tocó.</div>';if(!cb.checked){const b=document.createElement('button');b.className='mini';b.textContent=p?'✓ Ya está guardada como pendiente':'⏭️ Dejar pendiente para cuando vuelva a tocar';b.disabled=!!p;b.addEventListener('click',deferToday);box.appendChild(b);if(!p){const note=document.createElement('div');note.className='muted';note.style.marginTop='5px';note.textContent='No pasa a mañana: volverá cuando corresponda en el ciclo.';box.appendChild(note)}}else if(p)completePendingToday();last.appendChild(box);cb.addEventListener('change',()=>{if(cb.checked)completePendingToday()});
+if(smart){const [id,t,d]=smart,notice=document.createElement('div');notice.className='card';notice.style.border='2px solid var(--p)';notice.innerHTML='<span class="pill">🔄 PERIÓDICA QUE TOCA</span><h2 style="margin-top:8px">'+t+'</h2><div class="muted">La app la propone hoy porque está vencida y encaja con este día. Hazla en lugar del extra rotativo si así no se supera el límite de 2 horas.</div><div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px"><button class="btn" data-smartdone="'+id+'">✓ Hecha hoy</button><button class="btn alt" data-smartlater="'+id+'">Hoy no</button></div>';tareas.parentNode.insertBefore(notice,tareas);notice.querySelector('[data-smartdone]').addEventListener('click',()=>{const h=hist();h[id]=localISO();setHist(h);const ts=taskState();ts[base[c].tasks.length]=true;setTaskState(ts);deferToday();notice.remove();window.renderToday()});notice.querySelector('[data-smartlater]').addEventListener('click',()=>{localStorage.setItem('mcb_smart_skip_'+localISO()+'_'+id,'1');notice.remove()})}}
+const originalRenderToday=window.renderToday;window.renderToday=function(){document.querySelectorAll('[data-smartdone]').forEach(x=>x.closest('.card').remove());originalRenderToday();enhanceToday()};
+function undoPeriodic(id){const h=hist();if(!h[id])return;delete h[id];setHist(h);window.renderPeriodic();if(!document.getElementById('historial').classList.contains('hidden'))window.renderHistory()}
+window.renderPeriodic=function(){const h=hist();periodicList.innerHTML=periodic.map(([id,t,d])=>{const last=h[id]?new Date(h[id]+'T12:00'):null;let status='Sin registrar';if(last){const next=new Date(last);next.setDate(next.getDate()+d);const dif=Math.ceil((next-new Date())/86400000);status='Última: '+last.toLocaleDateString('es-ES')+' · '+(dif<=0?'Toca ahora':'Faltan '+dif+' días')}return'<div class="card"><span class="pill">'+d+' días aprox.</span><h2 style="margin-top:7px">'+t+'</h2><div class="muted">'+status+'</div><div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px"><button class="btn" data-p="'+id+'">✓ Hecha hoy</button>'+(last?'<button class="btn alt" data-undo-p="'+id+'">↶ Deshacer registro</button>':'')+'</div></div>'}).join('');document.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>{const h=hist();h[b.dataset.p]=localISO();setHist(h);window.renderPeriodic()}));document.querySelectorAll('[data-undo-p]').forEach(b=>b.addEventListener('click',()=>undoPeriodic(b.dataset.undoP)))};
+window.renderHistory=function(){const h=hist(),rows=periodic.filter(x=>h[x[0]]);histList.innerHTML=rows.length?rows.map(([id,t,d])=>{const last=new Date(h[id]+'T12:00'),next=new Date(last);next.setDate(next.getDate()+d);return'<div class="card"><h2>'+t+'</h2><div class="muted">Última: '+last.toLocaleDateString('es-ES')+'</div><div class="muted">Próxima referencia: '+next.toLocaleDateString('es-ES')+'</div><button class="btn alt" style="margin-top:8px" data-hundo="'+id+'">↶ Borrar este registro</button></div>'}).join(''):'<div class="card">Sin historial todavía.</div>';document.querySelectorAll('[data-hundo]').forEach(b=>b.addEventListener('click',()=>undoPeriodic(b.dataset.hundo)))};
+window.renderToday();window.renderPeriodic();
 })();
