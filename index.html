@@ -36,4 +36,4 @@ function renderHistory(){const h=hist(),rows=periodic.filter(x=>h[x[0]]);histLis
 function renderTips(){tipList.innerHTML=tips.map(([t,b])=>`<div class="card"><h2>${t}</h2><div class="muted">${b}</div></div>`).join('')}
 renderToday();renderWeeks();renderRooms();renderPeriodic();renderTips();
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js'))}
-</script></body></html>
+</script><script src="room-checklists.js?v=2"></script></body></html>
