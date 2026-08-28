@@ -1,0 +1,2 @@
+/* McB preflight: un dato local roto no debe dejar la casa a oscuras. */
+(function(){'use strict';const keys=['mcb_v2_today','mcb_v2_house','mcb_v2_laundry','mcb_v2_food','mcb_v2_shop','mcb_v2_people'];keys.forEach(k=>{let raw=localStorage.getItem(k);if(raw==null)return;try{JSON.parse(raw)}catch(e){try{localStorage.setItem(k+'_corrupt_'+Date.now(),raw)}catch(_){}localStorage.removeItem(k)}})})();
