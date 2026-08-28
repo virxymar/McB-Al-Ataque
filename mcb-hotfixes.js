@@ -5,7 +5,7 @@
   'use strict';
 
   function foodDecisionTask(task) {
-    return task && task.id === 'food_today' && window.food && Array.isArray(food.leftovers) && food.leftovers.length > 0 && food.plans && !food.plans.today;
+    return task && task.id === 'food_today' && typeof food !== 'undefined' && Array.isArray(food.leftovers) && food.leftovers.length > 0 && food.plans && !food.plans.today;
   }
 
   window.mcbTaskHTML = function (task, originalTaskHTML) {
