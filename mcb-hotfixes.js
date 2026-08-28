@@ -1,171 +1,49 @@
-/* McB · Al Ataque V2 — compatibilidad y migraciones seguras.
-   Repara estructuras antiguas/incompletas sin borrar datos válidos. */
+/* McB · Al Ataque V2 — compatibilidad, migraciones y mejoras seguras. */
 (function () {
-  'use strict';
+'use strict';
+function obj(v){return v&&typeof v==='object'&&!Array.isArray(v)?v:{}} function arr(v){return Array.isArray(v)?v:[]} function text(v,f){return typeof v==='string'?v:f}
+function readJSON(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
+function activeHomeFrom(v){if(!v||typeof v!=='object')return null;if(Array.isArray(v.homes)&&v.homes.length)return v.homes.find(h=>h&&h.id===v.activeHomeId)||v.homes[0];return v}
+function configuredHome(){for(const k of ['mcb_v2_home','mcb_config_v2','mcb_home_v2','mcb_config_lab','mcb_v2_home_draft']){let h=activeHomeFrom(readJSON(k));if(h)return h}return null}
+function mapParticipation(v){return v==='no'?'no':(v==='sencilla'||v==='simple')?'simple':'normal'}
+function mapCapacity(v){if(v==='poca'||v==='low')return'low';if(v==='bastante'||v==='high')return'high';if(v==='none')return'none';return'normal'}
+function syncConfigPeople(){if(typeof people==='undefined')return;let h=configuredHome();if(!h)return;let source=arr(h.members).length?h.members:h.people;if(!Array.isArray(source)||!source.length)return;let onlyDefault=Array.isArray(people.members)&&people.members.length===1&&people.members[0]&&people.members[0].id==='me'&&people.members[0].name==='Yo';if(!onlyDefault&&people.members&&people.members.length)return;people.members=source.map((p,i)=>{p=obj(p);let participation=mapParticipation(p.participation);return Object.assign({},p,{id:text(p.id,'cfg_person_'+i),name:text(p.name,p.nombre||('Persona '+(i+1))),participation,capacity:mapCapacity(p.capacity||p.availability),active:participation!=='no'})})}
+function normalize(){
+ if(typeof state!=='undefined'){state=obj(state);state.mode=['10','30','60','normal','none'].includes(state.mode)?state.mode:'normal';state.done=obj(state.done);state.quick=arr(state.quick).map(q=>typeof q==='string'?{text:q,done:false}:Object.assign({},obj(q),{text:text(obj(q).text,''),done:!!obj(q).done})).filter(q=>q.text)}
+ if(typeof house!=='undefined'){house=obj(house);house.condition=['poco','normal','mucho','minimo'].includes(house.condition)?house.condition:'normal';house.skipped=obj(house.skipped);house.periodic=obj(house.periodic)}
+ if(typeof laundry!=='undefined'){laundry=obj(laundry);laundry.basket=['low','medium','full'].includes(laundry.basket)?laundry.basket:'medium';laundry.drying=['tender','dryer'].includes(laundry.drying)?laundry.drying:'tender';laundry.batches=arr(laundry.batches).map((b,i)=>{b=obj(b);return Object.assign({},b,{id:text(b.id,'legacy_'+i),name:text(b.name,'Carga de ropa'),step:['dirty','washing','drying','clean','done'].includes(b.step)?b.step:'dirty'})})}
+ if(typeof food!=='undefined'){food=obj(food);food.plans=obj(food.plans);food.plans.today=text(food.plans.today,'');food.plans.tomorrow=text(food.plans.tomorrow,'');food.leftovers=arr(food.leftovers).filter(x=>typeof x==='string'&&x.trim());food.useSoon=arr(food.useSoon).filter(x=>typeof x==='string'&&x.trim());food.freezer=arr(food.freezer).map(x=>typeof x==='string'?{name:x,portions:1}:Object.assign({},obj(x),{name:text(obj(x).name,''),portions:Number(obj(x).portions)||1})).filter(x=>x.name);food.dishes=arr(food.dishes).map(x=>typeof x==='string'?{name:x,tags:[]}:Object.assign({},obj(x),{name:text(obj(x).name,''),tags:arr(obj(x).tags).filter(t=>typeof t==='string')})).filter(x=>x.name);if(!food.dishes.length)food.dishes=[{name:'Lentejas',tags:['guiso','facil']},{name:'Tortilla de patata',tags:['facil']},{name:'Pasta',tags:['rapido','facil']}];food.filter=['rapido','guiso','facil','congelador','aprovechar','sorpresa'].includes(food.filter)?food.filter:'facil'}
+ if(typeof shop!=='undefined'){shop=obj(shop);shop.items=arr(shop.items).map((x,i)=>{x=typeof x==='string'?{name:x}:obj(x);let name=text(x.name,'').trim();return Object.assign({},x,{id:text(x.id,'legacy_shop_'+i),name,category:text(x.category,typeof cat==='function'?cat(name):'Despensa y otros'),urgent:!!x.urgent,bought:!!x.bought,source:text(x.source,'manual')})}).filter(x=>x.name);shop.stock=arr(shop.stock).map(x=>typeof x==='string'?{name:x,state:'ok'}:Object.assign({},obj(x),{name:text(obj(x).name,''),state:['ok','low','out'].includes(obj(x).state)?obj(x).state:'ok'})).filter(x=>x.name);if(!shop.stock.length)shop.stock=[{name:'Papel higiénico',state:'ok'},{name:'Detergente',state:'ok'},{name:'Leche',state:'ok'}]}
+ if(typeof people!=='undefined'){people=obj(people);people.assignments=obj(people.assignments);people.members=arr(people.members).map((p,i)=>{p=obj(p);let participation=mapParticipation(p.participation);return Object.assign({},p,{id:text(p.id,'legacy_person_'+i),name:text(p.name,p.nombre||('Persona '+(i+1))),participation,capacity:mapCapacity(p.capacity||p.availability),active:participation!=='no'&&p.active!==false})});syncConfigPeople();let ids=new Set(people.members.map(p=>p.id));Object.keys(people.assignments).forEach(k=>{if(!ids.has(people.assignments[k]))delete people.assignments[k]})}
+ if(typeof save==='function')save()
+}
+if(typeof window.cfg==='function')window.cfg=()=>configuredHome();
 
-  function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
-  function arr(v) { return Array.isArray(v) ? v : []; }
-  function text(v, fallback) { return typeof v === 'string' ? v : fallback; }
-
-  function readJSON(key) {
-    try { return JSON.parse(localStorage.getItem(key) || 'null'); }
-    catch (e) { return null; }
-  }
-
-  function activeHomeFrom(v) {
-    if (!v || typeof v !== 'object') return null;
-    if (Array.isArray(v.homes) && v.homes.length) {
-      return v.homes.find(function(h){ return h && h.id === v.activeHomeId; }) || v.homes[0];
-    }
-    return v;
-  }
-
-  function configuredHome() {
-    var keys=['mcb_v2_home','mcb_config_v2','mcb_home_v2','mcb_config_lab','mcb_v2_home_draft'];
-    for (var i=0;i<keys.length;i++) {
-      var h=activeHomeFrom(readJSON(keys[i]));
-      if (h) return h;
-    }
-    return null;
-  }
-
-  function mapParticipation(v) {
-    return v==='no'?'no':(v==='sencilla'||v==='simple')?'simple':'normal';
-  }
-
-  function mapCapacity(v) {
-    if (v==='poca'||v==='low') return 'low';
-    if (v==='bastante'||v==='high') return 'high';
-    if (v==='none') return 'none';
-    return 'normal';
-  }
-
-  function syncConfigPeople() {
-    if (typeof people === 'undefined') return;
-    var h=configuredHome();
-    if (!h) return;
-    var source=arr(h.members).length?h.members:h.people;
-    if (!Array.isArray(source) || !source.length) return;
-
-    var onlyDefault = Array.isArray(people.members) && people.members.length===1 &&
-      people.members[0] && people.members[0].id==='me' && people.members[0].name==='Yo';
-    if (!onlyDefault && people.members && people.members.length) return;
-
-    people.members=source.map(function(p,i){
-      p=obj(p);
-      var participation=mapParticipation(p.participation);
-      return Object.assign({},p,{
-        id:text(p.id,'cfg_person_'+i),
-        name:text(p.name,p.nombre||('Persona '+(i+1))),
-        participation:participation,
-        capacity:mapCapacity(p.capacity||p.availability),
-        active:participation!=='no'
-      });
-    });
-  }
-
-  function normalize() {
-    if (typeof state !== 'undefined') {
-      state = obj(state);
-      state.mode = ['10','30','60','normal','none'].includes(state.mode) ? state.mode : 'normal';
-      state.done = obj(state.done);
-      state.quick = arr(state.quick).map(function (q) {
-        if (typeof q === 'string') return { text:q, done:false };
-        q = obj(q); return Object.assign({}, q, { text:text(q.text,''), done:!!q.done });
-      }).filter(function(q){ return q.text; });
-    }
-
-    if (typeof house !== 'undefined') {
-      house = obj(house);
-      house.condition = ['poco','normal','mucho','minimo'].includes(house.condition) ? house.condition : 'normal';
-    }
-
-    if (typeof laundry !== 'undefined') {
-      laundry = obj(laundry);
-      laundry.basket = ['low','medium','full'].includes(laundry.basket) ? laundry.basket : 'medium';
-      laundry.drying = ['tender','dryer'].includes(laundry.drying) ? laundry.drying : 'tender';
-      laundry.batches = arr(laundry.batches).map(function (b,i) {
-        b=obj(b); var step=['dirty','washing','drying','clean','done'].includes(b.step)?b.step:'dirty';
-        return Object.assign({}, b, { id:text(b.id,'legacy_'+i), name:text(b.name,'Carga de ropa'), step:step });
-      });
-    }
-
-    if (typeof food !== 'undefined') {
-      food = obj(food);
-      food.plans = obj(food.plans);
-      food.plans.today = text(food.plans.today,'');
-      food.plans.tomorrow = text(food.plans.tomorrow,'');
-      food.leftovers = arr(food.leftovers).filter(function(x){return typeof x==='string'&&x.trim();});
-      food.useSoon = arr(food.useSoon).filter(function(x){return typeof x==='string'&&x.trim();});
-      food.freezer = arr(food.freezer).map(function(x){
-        if(typeof x==='string') return {name:x,portions:1};
-        x=obj(x); return Object.assign({}, x, {name:text(x.name,''),portions:Number(x.portions)||1});
-      }).filter(function(x){return x.name;});
-      food.dishes = arr(food.dishes).map(function(x){
-        if(typeof x==='string') return {name:x,tags:[]};
-        x=obj(x); return Object.assign({}, x, {name:text(x.name,''),tags:arr(x.tags).filter(function(t){return typeof t==='string';})});
-      }).filter(function(x){return x.name;});
-      if(!food.dishes.length) food.dishes=[{name:'Lentejas',tags:['guiso','facil']},{name:'Tortilla de patata',tags:['facil']},{name:'Pasta',tags:['rapido','facil']}];
-      food.filter = ['rapido','guiso','facil','congelador','aprovechar','sorpresa'].includes(food.filter) ? food.filter : 'facil';
-    }
-
-    if (typeof shop !== 'undefined') {
-      shop = obj(shop);
-      shop.items = arr(shop.items).map(function(x,i){
-        if(typeof x==='string') x={name:x}; else x=obj(x);
-        var name=text(x.name,'').trim();
-        return Object.assign({}, x, {id:text(x.id,'legacy_shop_'+i),name:name,category:text(x.category,typeof cat==='function'?cat(name):'Despensa y otros'),urgent:!!x.urgent,bought:!!x.bought,source:text(x.source,'manual')});
-      }).filter(function(x){return x.name;});
-      shop.stock = arr(shop.stock).map(function(x){
-        if(typeof x==='string') return {name:x,state:'ok'};
-        x=obj(x); return Object.assign({}, x, {name:text(x.name,''),state:['ok','low','out'].includes(x.state)?x.state:'ok'});
-      }).filter(function(x){return x.name;});
-      if(!shop.stock.length) shop.stock=[{name:'Papel higiénico',state:'ok'},{name:'Detergente',state:'ok'},{name:'Leche',state:'ok'}];
-    }
-
-    if (typeof people !== 'undefined') {
-      people = obj(people);
-      people.assignments = obj(people.assignments);
-      people.members = arr(people.members).map(function(p,i){
-        p=obj(p); var participation=mapParticipation(p.participation);
-        var capacity=mapCapacity(p.capacity||p.availability);
-        return Object.assign({}, p, {id:text(p.id,'legacy_person_'+i),name:text(p.name,p.nombre||('Persona '+(i+1))),participation:participation,capacity:capacity,active:participation!=='no' && p.active!==false});
-      });
-      syncConfigPeople();
-      var ids=new Set(people.members.map(function(p){return p.id;}));
-      Object.keys(people.assignments).forEach(function(k){ if(!ids.has(people.assignments[k])) delete people.assignments[k]; });
-    }
-
-    if (typeof save === 'function') save();
-  }
-
-  if (typeof window.cfg === 'function') {
-    window.cfg = function(){ return configuredHome(); };
-  }
-
-  function foodDecisionTask(task) {
-    return task && task.id === 'food_today' && typeof food !== 'undefined' && Array.isArray(food.leftovers) && food.leftovers.length > 0 && food.plans && !food.plans.today;
-  }
-
-  window.mcbTaskHTML = function (task, originalTaskHTML) {
-    if (!foodDecisionTask(task)) return originalTaskHTML(task);
-    var assigned = typeof assignee === 'function' ? assignee(task) : '';
-    return '<div class="task"><div class="taskHead"><div><b>' + esc(task.text) + '</b> ' + assigned +
-      '<div class="meta">Elige una sobra o decide otra comida.</div></div>' +
-      '<button class="btn soft" type="button" onclick="openView(\'comida\')">Decidir comida →</button></div></div>';
-  };
-
-  function install() {
-    if (window.__mcbHotfixesInstalled) return;
-    normalize();
-    if (typeof window.taskHTML === 'function') {
-      var originalTaskHTML = window.taskHTML;
-      window.taskHTML = function (task) { return window.mcbTaskHTML(task, originalTaskHTML); };
-    }
-    window.__mcbHotfixesInstalled = true;
-    if (typeof window.render === 'function') window.render();
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once:true});
-  else install();
+const ROOM_TASKS={
+ cocina:[['Encimera',6],['Fregadero',5],['Placa',6],['Frentes',8],['Electrodomésticos por fuera',7],['Suelo',10]],
+ bano:[['WC',5],['Lavabo',5],['Ducha',8],['Mampara',8],['Espejo',4],['Mueble',6],['Suelo',8]],
+ dorm:[['Ventilar',2],['Hacer camas',5],['Polvo',7],['Aspirar/barrer',8],['Cambio de sábanas',10]],
+ salon:[['Recogida',8],['Polvo',8],['Mesa y sillas',5],['Sofá y cojines',5],['Aspirar/barrer',10]],
+ entrada:[['Recogida',5],['Polvo',5],['Suelo',6]]
+};
+const PERIODICS=[['micro','Microondas por dentro',15,30],['horno','Horno según necesidad',25,45],['cristales','Cristales por zonas',25,30],['rodapies','Rodapiés por zonas',20,45],['altas','Partes altas y lámparas',20,60],['persianas','Persianas por zonas',30,75],['colchones','Aspirar colchones',20,45],['frigo','Frigorífico por zonas',20,30]];
+function roomId(room,name){return'hr_'+room+'_'+name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_')}
+function richHouseTasks(){let out=[];Object.keys(ROOM_TASKS).forEach(room=>ROOM_TASKS[room].forEach(([name,min])=>{let id=roomId(room,name);if(!house.skipped[id])out.push({id,area:'casa',text:name,min,priority:2,room})}));let lim=house.condition==='minimo'?5:house.condition==='poco'?10:house.condition==='normal'?18:99;return out.slice(0,lim)}
+function periodicDue(p){let x=house.periodic[p[0]];if(!x||!x.last)return true;return Date.now()-x.last>=p[3]*86400000}
+function richPeriodics(){return PERIODICS.filter(periodicDue).map(p=>({id:'hp_'+p[0],area:'casa',text:p[1],min:p[2],priority:1,period:p[3]}))}
+function markHouseDone(id){state.done[id]=true;if(id.startsWith('hp_')){let k=id.slice(3);house.periodic[k]=Object.assign({},house.periodic[k],{last:Date.now()})}save();render()}
+function skipHouse(id){house.skipped[id]=true;delete state.done[id];delete people.assignments[id];save();render()}
+function deferHouse(id){state.done[id]=true;save();render()}
+function richTaskHTML(t){let d=!!state.done[t.id];return '<div class="task"><div class="taskHead"><div><b class="'+(d?'done':'')+'">'+esc(t.text)+'</b> '+assignee(t)+'<div class="meta">≈ '+t.min+' min activos</div></div><input type="checkbox" '+(d?'checked':'')+' onchange="'+(t.id.startsWith('hp_')?'markHouseDone': 'completeTask')+'(\''+t.id+'\''+(t.id.startsWith('hp_')?'':',this.checked')+')"></div><div class="assign"><button class="mini" onclick="claim(\''+t.id+'\')">🙋 Me encargo</button><button class="mini" onclick="choose(\''+t.id+'\')">Asignar…</button><button class="mini" onclick="skipHouse(\''+t.id+'\')">No lo necesita</button><button class="mini" onclick="deferHouse(\''+t.id+'\')">Puede esperar</button></div></div>'}
+function renderRichHouse(){
+ if(typeof houseChips!=='undefined')houseChips.innerHTML=[['poco','✨ Bastante bien'],['normal','🙂 Normal'],['mucho','😅 Necesita cariño'],['minimo','😵 Solo mínimos']].map(x=>'<button class="chip '+(house.condition===x[0]?'on':'')+'" onclick="house.condition=\''+x[0]+'\';save();render()">'+x[1]+'</button>').join('');
+ if(typeof houseList==='undefined')return;
+ let labels={cocina:'🍳 Cocina',bano:'🚿 Baño',dorm:'🛏️ Dormitorios',salon:'🛋️ Salón',entrada:'🚪 Entrada'};let tasks=richHouseTasks();let html='<div class="meta" style="margin-bottom:10px">Por estancias · marca, reparte o deja para otro momento.</div>';
+ Object.keys(labels).forEach(r=>{let a=tasks.filter(t=>t.room===r);if(a.length)html+='<details class="card" open><summary><b>'+labels[r]+'</b> · '+a.length+'</summary><div style="margin-top:8px">'+a.map(richTaskHTML).join('')+'</div></details>'});
+ let ps=richPeriodics();html+='<div class="sectionTitle"><h2>🔄 Periódicas</h2></div><div class="card">'+(ps.length?ps.map(richTaskHTML).join(''):'<div class="empty">Nada periódico necesita atención 🎉</div>')+'</div>';houseList.innerHTML=html;
+}
+function foodDecisionTask(task){return task&&task.id==='food_today'&&typeof food!=='undefined'&&Array.isArray(food.leftovers)&&food.leftovers.length>0&&food.plans&&!food.plans.today}
+window.mcbTaskHTML=function(task,original){if(!foodDecisionTask(task))return original(task);let assigned=typeof assignee==='function'?assignee(task):'';return '<div class="task"><div class="taskHead"><div><b>'+esc(task.text)+'</b> '+assigned+'<div class="meta">Elige una sobra o decide otra comida.</div></div><button class="btn soft" type="button" onclick="openView(\'comida\')">Decidir comida →</button></div></div>'};
+function install(){if(window.__mcbHotfixesInstalled)return;normalize();window.markHouseDone=markHouseDone;window.skipHouse=skipHouse;window.deferHouse=deferHouse;if(typeof window.taskHTML==='function'){let original=window.taskHTML;window.taskHTML=t=>window.mcbTaskHTML(t,original)}if(typeof window.renderHouse==='function')window.renderHouse=renderRichHouse;window.__mcbHotfixesInstalled=true;if(typeof window.render==='function')window.render()}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();
