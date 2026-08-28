@@ -1,10 +1,11 @@
-const CACHE='mcb-al-ataque-v6';
+const CACHE='mcb-al-ataque-v7';
 const CORE=[
   './',
   './index.html',
   './configurador.html',
   './mcb-hotfixes.js',
   './mcb-people-v2.js',
+  './mcb-today-v2.js',
   './manifest.webmanifest',
   './icon.svg'
 ];
