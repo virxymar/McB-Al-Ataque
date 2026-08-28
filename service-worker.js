@@ -1,5 +1,13 @@
-const CACHE='mcb-al-ataque-v5';
-const CORE=['./','./index.html','./mcb-hotfixes.js','./manifest.webmanifest','./icon.svg'];
+const CACHE='mcb-al-ataque-v6';
+const CORE=[
+  './',
+  './index.html',
+  './configurador.html',
+  './mcb-hotfixes.js',
+  './mcb-people-v2.js',
+  './manifest.webmanifest',
+  './icon.svg'
+];
 const FALLBACK='./index.html';
 
 self.addEventListener('install',event=>{
@@ -29,11 +37,11 @@ self.addEventListener('fetch',event=>{
         .then(response=>{
           if(response && response.ok){
             const copy=response.clone();
-            caches.open(CACHE).then(cache=>cache.put(FALLBACK,copy));
+            caches.open(CACHE).then(cache=>cache.put(event.request,copy));
           }
           return response;
         })
-        .catch(()=>caches.match(FALLBACK))
+        .catch(()=>caches.match(event.request).then(r=>r||caches.match(FALLBACK)))
     );
     return;
   }
