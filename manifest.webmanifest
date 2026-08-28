@@ -1,7 +1,7 @@
 {
   "name": "McB · Al Ataque",
   "short_name": "McB Al Ataque",
-  "description": "Planificador de limpieza McB",
+  "description": "Asistente doméstico para organizar casa, colada, comidas, compra y reparto sin llevarlo todo en la cabeza.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
