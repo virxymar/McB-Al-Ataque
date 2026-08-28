@@ -1,4 +1,4 @@
-const CACHE='mcb-al-ataque-v9';
+const CACHE='mcb-al-ataque-v10';
 const CORE=[
   './',
   './index.html',
