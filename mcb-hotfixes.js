@@ -7,6 +7,63 @@
   function arr(v) { return Array.isArray(v) ? v : []; }
   function text(v, fallback) { return typeof v === 'string' ? v : fallback; }
 
+  function readJSON(key) {
+    try { return JSON.parse(localStorage.getItem(key) || 'null'); }
+    catch (e) { return null; }
+  }
+
+  function activeHomeFrom(v) {
+    if (!v || typeof v !== 'object') return null;
+    if (Array.isArray(v.homes) && v.homes.length) {
+      return v.homes.find(function(h){ return h && h.id === v.activeHomeId; }) || v.homes[0];
+    }
+    return v;
+  }
+
+  function configuredHome() {
+    var keys=['mcb_v2_home','mcb_config_v2','mcb_home_v2','mcb_config_lab','mcb_v2_home_draft'];
+    for (var i=0;i<keys.length;i++) {
+      var h=activeHomeFrom(readJSON(keys[i]));
+      if (h) return h;
+    }
+    return null;
+  }
+
+  function mapParticipation(v) {
+    return v==='no'?'no':(v==='sencilla'||v==='simple')?'simple':'normal';
+  }
+
+  function mapCapacity(v) {
+    if (v==='poca'||v==='low') return 'low';
+    if (v==='bastante'||v==='high') return 'high';
+    if (v==='none') return 'none';
+    return 'normal';
+  }
+
+  function syncConfigPeople() {
+    if (typeof people === 'undefined') return;
+    var h=configuredHome();
+    if (!h) return;
+    var source=arr(h.members).length?h.members:h.people;
+    if (!Array.isArray(source) || !source.length) return;
+
+    var onlyDefault = Array.isArray(people.members) && people.members.length===1 &&
+      people.members[0] && people.members[0].id==='me' && people.members[0].name==='Yo';
+    if (!onlyDefault && people.members && people.members.length) return;
+
+    people.members=source.map(function(p,i){
+      p=obj(p);
+      var participation=mapParticipation(p.participation);
+      return Object.assign({},p,{
+        id:text(p.id,'cfg_person_'+i),
+        name:text(p.name,p.nombre||('Persona '+(i+1))),
+        participation:participation,
+        capacity:mapCapacity(p.capacity||p.availability),
+        active:participation!=='no'
+      });
+    });
+  }
+
   function normalize() {
     if (typeof state !== 'undefined') {
       state = obj(state);
@@ -70,15 +127,20 @@
       people = obj(people);
       people.assignments = obj(people.assignments);
       people.members = arr(people.members).map(function(p,i){
-        p=obj(p); var participation=['no','simple','normal'].includes(p.participation)?p.participation:'normal';
-        var capacity=['none','low','normal','high'].includes(p.capacity)?p.capacity:'normal';
+        p=obj(p); var participation=mapParticipation(p.participation);
+        var capacity=mapCapacity(p.capacity||p.availability);
         return Object.assign({}, p, {id:text(p.id,'legacy_person_'+i),name:text(p.name,p.nombre||('Persona '+(i+1))),participation:participation,capacity:capacity,active:participation!=='no' && p.active!==false});
       });
+      syncConfigPeople();
       var ids=new Set(people.members.map(function(p){return p.id;}));
       Object.keys(people.assignments).forEach(function(k){ if(!ids.has(people.assignments[k])) delete people.assignments[k]; });
     }
 
     if (typeof save === 'function') save();
+  }
+
+  if (typeof window.cfg === 'function') {
+    window.cfg = function(){ return configuredHome(); };
   }
 
   function foodDecisionTask(task) {
