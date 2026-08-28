@@ -1,1 +1,0 @@
-McB V2 se construye en esta rama sin tocar main.
